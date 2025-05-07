@@ -2,8 +2,7 @@
 import React, { useEffect, useRef } from 'react';
 import 'aframe';
 import './App.css';
-// We will create this file in the next sub-step
-import './ARHitTestReticle'; // Import the custom component
+import './components/ARHitTestReticle'; 
 
 function App() {
   const sceneRef = useRef(null);

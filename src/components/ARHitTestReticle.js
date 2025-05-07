@@ -105,7 +105,7 @@ AFRAME.registerComponent('ar-hit-test-reticle', {
       this.el.object3D.visible = false;
     }
   },
-
+  
   // This function will be called when the user taps the screen (we'll hook this up later).
   onSelect: function () {
     if (this.el.object3D.visible) { // Only if the reticle is visible (meaning it found a surface)
