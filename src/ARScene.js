@@ -5,22 +5,16 @@ const ARScene = () => {
   const shapeRef = useRef(null);
 
   useEffect(() => {
-    // Optional: Check camera access (already tested)
-    navigator.mediaDevices.getUserMedia({ video: true }).then(() => {
-      console.log('✅ Camera confirmed working');
-    }).catch((err) => {
-      console.error('❌ Camera issue:', err);
-    });
-
     const scene = document.querySelector('a-scene');
     let hitTestSource = null;
     let localSpace = null;
 
+    // Confirm WebXR session
     scene.addEventListener('enter-vr', async () => {
-      console.log('🔁 AR session is starting...');
+      console.log("🔁 AR session starting...");
       const session = scene.renderer.xr.getSession();
       if (!session) {
-        console.warn('⚠️ WebXR session failed');
+        alert("❌ Failed to start WebXR session");
         return;
       }
 
@@ -28,14 +22,14 @@ const ARScene = () => {
       localSpace = await session.requestReferenceSpace('local');
       hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
 
-      // On tap, place the shape where the ray is
+      // Place red circle on tap
       scene.addEventListener('click', () => {
         const pos = rayRef.current.getAttribute('position');
         shapeRef.current.setAttribute('position', pos);
         shapeRef.current.setAttribute('visible', 'true');
       });
 
-      // Continuously update ray position using hit-test
+      // Track surface and show yellow ray
       const onXRFrame = (time, frame) => {
         const pose = frame.getViewerPose(localSpace);
         if (!pose) return;
@@ -57,21 +51,21 @@ const ARScene = () => {
 
   const startARSession = async () => {
     if (!navigator.xr) {
-      alert('❌ WebXR not supported');
+      alert('❌ WebXR not available');
       return;
     }
 
     const supported = await navigator.xr.isSessionSupported('immersive-ar');
     if (!supported) {
-      alert('❌ AR not supported on this device/browser');
+      alert('❌ immersive-ar not supported on this device/browser');
       return;
     }
 
     const scene = document.querySelector('a-scene');
 
     const enterAR = () => {
-      console.log('🟢 Entering AR...');
-      scene.enterVR();
+      console.log("🟢 Entering AR...");
+      scene.enterVR(); // Triggers AR session
     };
 
     if (scene.hasLoaded) {
@@ -83,14 +77,14 @@ const ARScene = () => {
 
   return (
     <div>
-      {/* Start AR Button */}
+      {/* Start AR button */}
       <button
         onClick={startARSession}
         style={{
           position: 'absolute',
           top: '20px',
           left: '20px',
-          zIndex: 5,
+          zIndex: 10,
           padding: '10px 20px',
           background: '#000',
           color: '#fff',
@@ -101,11 +95,12 @@ const ARScene = () => {
         Start AR
       </button>
 
-      {/* WebXR AR Scene */}
+      {/* AR Scene */}
       <a-scene
         webxr="optionalFeatures: hit-test; requiredFeatures: local-floor;"
         vr-mode-ui="enabled: false"
         renderer="colorManagement: true;"
+        background="color: black"
         embedded
         style={{
           width: '100%',
@@ -116,7 +111,10 @@ const ARScene = () => {
           zIndex: 0,
         }}
       >
-        {/* Yellow ray showing surface */}
+        {/* Debug box so scene isn’t empty */}
+        <a-box position="0 1.6 -2" color="blue" depth="0.5" height="0.5" width="0.5"></a-box>
+
+        {/* Yellow ray on surface */}
         <a-cylinder
           ref={rayRef}
           color="yellow"
@@ -126,7 +124,7 @@ const ARScene = () => {
           visible="false"
         ></a-cylinder>
 
-        {/* Circle placed on tap */}
+        {/* Circle placed when tapped */}
         <a-circle
           ref={shapeRef}
           color="red"
