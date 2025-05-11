@@ -1,15 +1,25 @@
 import React, { useEffect, useRef } from 'react';
 
 const ARScene = () => {
-  const rayRef = useRef(null);        // Yellow ray pointing to surface
-  const shapeRef = useRef(null);      // Circle to be placed on tap
+  const rayRef = useRef(null);
+  const shapeRef = useRef(null);
 
   useEffect(() => {
+    // ✅ WebXR support check
+    if (navigator.xr) {
+      navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+        console.log('AR supported:', supported);
+        if (!supported) alert('AR not supported on this device/browser.');
+      });
+    } else {
+      alert('WebXR not available in this browser.');
+    }
+
     const scene = document.querySelector('a-scene');
     let hitTestSource = null;
     let localSpace = null;
 
-    // When user enters AR, set up WebXR hit test
+    // ✅ When AR session starts, setup hit-test
     scene.addEventListener('enter-vr', async () => {
       const session = scene.renderer.xr.getSession();
       if (!session) return;
@@ -18,17 +28,17 @@ const ARScene = () => {
       localSpace = await session.requestReferenceSpace('local');
       hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
 
-      // On user tap, place a shape at the ray position
+      // Tap to place circle at ray
       scene.addEventListener('click', () => {
         const pos = rayRef.current.getAttribute('position');
         shapeRef.current.setAttribute('position', pos);
         shapeRef.current.setAttribute('visible', 'true');
       });
 
-      // XR frame loop to update ray position on detected surface
+      // Hit-test loop
       const onXRFrame = (time, frame) => {
-        const viewerPose = frame.getViewerPose(localSpace);
-        if (!viewerPose) return;
+        const pose = frame.getViewerPose(localSpace);
+        if (!pose) return;
 
         const hits = frame.getHitTestResults(hitTestSource);
         if (hits.length > 0) {
@@ -47,12 +57,14 @@ const ARScene = () => {
 
   return (
     <div>
-      {/* Button to manually start WebXR AR session */}
+      {/* ✅ Start AR Button */}
       <button
         onClick={() => {
           const scene = document.querySelector('a-scene');
-          if (scene) {
-            scene.enterVR(); // This triggers the camera and AR session
+          if (scene.hasLoaded) {
+            scene.enterVR(); // triggers AR session + camera
+          } else {
+            scene.addEventListener('loaded', () => scene.enterVR());
           }
         }}
         style={{
@@ -70,7 +82,7 @@ const ARScene = () => {
         Start AR
       </button>
 
-      {/* A-Frame WebXR Scene */}
+      {/* ✅ WebXR Scene */}
       <a-scene
         webxr="optionalFeatures: hit-test; requiredFeatures: local-floor;"
         vr-mode-ui="enabled: false"
@@ -85,7 +97,7 @@ const ARScene = () => {
           zIndex: 0,
         }}
       >
-        {/* Yellow ray showing detected surface */}
+        {/* Ray pointing to detected surface */}
         <a-cylinder
           ref={rayRef}
           color="yellow"
@@ -95,7 +107,7 @@ const ARScene = () => {
           visible="false"
         ></a-cylinder>
 
-        {/* Red circle placed on tap */}
+        {/* Circle placed on surface when tapped */}
         <a-circle
           ref={shapeRef}
           color="red"
@@ -104,7 +116,6 @@ const ARScene = () => {
           visible="false"
         ></a-circle>
 
-        {/* Ambient light and camera */}
         <a-light type="ambient" intensity="0.5"></a-light>
         <a-camera position="0 1.6 0"></a-camera>
       </a-scene>
