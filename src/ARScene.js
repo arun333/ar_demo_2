@@ -1,116 +1,155 @@
-import 'aframe'; // Import A-Frame. IMPORTANT: Must be imported before <a-scene>
+// src/ARScene.js
+import 'aframe'; // Ensure this is at the top
 import React, { useState, useEffect, useRef } from 'react';
 
 const ARScene = () => {
   const [arReady, setArReady] = useState(false);
-  const [objects, setObjects] = useState([]); // To store placed objects
+  const [objects, setObjects] = useState([]);
   const sceneRef = useRef(null);
-  const reticleRef = useRef(null); // Reference to the reticle entity
+  const reticleRef = useRef(null);
 
   useEffect(() => {
     const sceneEl = sceneRef.current;
-    if (!sceneEl) return;
+    if (!sceneEl) {
+      console.log("Scene element not found yet.");
+      return;
+    }
+
+    console.log("useEffect for ARScene running. Scene element:", sceneEl);
 
     // Check for WebXR support
     if (navigator.xr) {
       navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
         if (supported) {
-          console.log("AR is supported!");
-          // No need to setArReady here, A-Frame handles session start
+          console.log("AR is supported by this browser/device!");
+          // A-Frame's "Enter AR" button should appear if AR is supported.
         } else {
-          console.log("AR not supported on this device/browser.");
-          alert("AR not supported on this device/browser.");
+          console.warn("AR not supported on this device/browser.");
+          alert("AR not supported on this device/browser. Make sure you are on a compatible device (e.g., Android with ARCore) and browser (e.g., Chrome).");
         }
+      }).catch((err) => {
+        console.error("Error checking AR support:", err);
+        alert("Error checking AR support. See console for details.");
       });
     } else {
-      console.log("WebXR API not available.");
+      console.warn("WebXR API (navigator.xr) not available. Please use a compatible browser like Chrome on Android.");
       alert("WebXR API not available. Please use a compatible browser like Chrome on Android.");
     }
 
     const handleARError = (event) => {
-      console.error("AR Error:", event);
-      alert(`AR Error: ${event.detail?.error?.message || 'Unknown AR error'}`);
+      console.error("AR Session Error Event:", event);
+      let message = 'Unknown AR error';
+      if (event.detail && event.detail.error && event.detail.error.message) {
+        message = event.detail.error.message;
+      } else if (event.detail && event.detail.message) {
+        message = event.detail.message;
+      } else if (event.message) {
+        message = event.message;
+      }
+      alert(`AR Error: ${message}`);
+      setArReady(false);
     };
 
-    const handleARSessionStart = () => {
-      console.log("AR Session Started");
-      setArReady(true); // Now we are in AR
-      // Hide the enter AR button or show "Exit AR"
-      const enterARButton = document.getElementById('my-enter-ar-button');
-      if(enterARButton) enterARButton.style.display = 'none';
-
-      // Make reticle visible only in AR
+    const handleARSessionStart = (event) => {
+      console.log("AR Session Started (enter-vr event). Event detail:", event.detail);
+      setArReady(true);
       if (reticleRef.current) {
         reticleRef.current.setAttribute('visible', true);
       }
+      // Hide A-Frame's default button if it's still visible
+      const enterARButton = sceneEl.querySelector('.a-enter-vr-button'); // A-Frame's button
+      if (enterARButton) enterARButton.style.display = 'none';
     };
 
-    const handleARSessionEnd = () => {
-      console.log("AR Session Ended");
+    const handleARSessionEnd = (event) => {
+      console.log("AR Session Ended (exit-vr event). Event detail:", event.detail);
       setArReady(false);
-      // Show the enter AR button again
-      const enterARButton = document.getElementById('my-enter-ar-button');
-      if(enterARButton) enterARButton.style.display = 'block';
-      
-      // Hide reticle when not in AR
       if (reticleRef.current) {
         reticleRef.current.setAttribute('visible', false);
       }
+      const enterARButton = sceneEl.querySelector('.a-enter-vr-button');
+      if (enterARButton) enterARButton.style.display = 'block';
     };
 
-    // Event listener for placing objects on tap
     const placeObject = (event) => {
+      // Check if the click originated from the scene itself, not UI elements
+      // For tap, event.detail.intersection might not always be reliable without raycaster
+      // We rely on the reticle's visibility, which is controlled by ar-hit-test
       if (arReady && reticleRef.current && reticleRef.current.getAttribute('visible')) {
-        // Get reticle's current position and rotation
         const position = reticleRef.current.getAttribute('position');
-        const rotation = reticleRef.current.getAttribute('rotation'); // Or use orientation for better alignment
+        const rotation = reticleRef.current.getAttribute('rotation');
 
         if (position) {
           const newObject = {
-            id: `box-${Date.now()}`, // Unique ID
+            id: `box-${Date.now()}`,
             position: `${position.x} ${position.y} ${position.z}`,
             rotation: `${rotation.x} ${rotation.y} ${rotation.z}`,
-            color: `#${Math.floor(Math.random()*16777215).toString(16)}` // Random color
+            color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
           };
+          console.log("Placing object:", newObject);
           setObjects(prevObjects => [...prevObjects, newObject]);
-          console.log("Placed object at:", newObject.position);
         }
+      } else {
+        console.log("Cannot place object: AR not ready or reticle not visible.");
       }
     };
+    
+    // Scene loaded event is good for initial checks
+    const onSceneLoaded = () => {
+        console.log("A-Frame scene <a-scene> has loaded.");
+        // The ar-hit-test component will manage the reticle visibility based on found planes
+    };
 
-    sceneEl.addEventListener('loaded', () => {
-      console.log("A-Frame scene loaded.");
-      // The ar-hit-test component will manage the reticle visibility based on found planes
-    });
-
+    sceneEl.addEventListener('loaded', onSceneLoaded);
     sceneEl.addEventListener('enter-vr', handleARSessionStart); // 'enter-vr' is used for both VR and AR
     sceneEl.addEventListener('exit-vr', handleARSessionEnd);
-    sceneEl.addEventListener('xr-session-init-error', handleARError);
+    sceneEl.addEventListener('xrballoon FAILED', handleARError); // General XR session failure
+    sceneEl.addEventListener('xr-session-init-error', handleARError); // More specific init error
 
-    // Listen for clicks on the scene (for placing objects)
-    // Note: Clicks are often translated to 'select' events in WebXR
-    sceneEl.addEventListener('click', placeObject); 
-    // Alternatively, listen to 'select' event which is more standard for XR inputs
-    // sceneEl.addEventListener('select', placeObject); // Requires a controller or gaze input for some setups
+
+    // Listen for 'select' event, which is standard for XR input
+    // If 'select' doesn't work for screen tap on your device, 'click' can be a fallback.
+    // sceneEl.addEventListener('click', placeObject);
+    
+    // WebXR 'select' event is more standard for interactions
+    const xrSession = sceneEl.xrSession;
+    if (xrSession) {
+        console.log("Adding 'select' event listener to existing XR session.");
+        xrSession.addEventListener('select', placeObject); // This is the ideal event for taps in AR
+    } else {
+        console.log("XR session not yet available to add 'select' listener. Will try on session start.");
+        sceneEl.addEventListener('enter-vr', function onEnterVRForSelect() {
+            if (sceneEl.xrSession) {
+                console.log("Adding 'select' event listener to XR session after enter-vr.");
+                sceneEl.xrSession.addEventListener('select', placeObject);
+                sceneEl.removeEventListener('enter-vr', onEnterVRForSelect); // Clean up this specific listener
+            }
+        });
+    }
 
 
     // Cleanup
     return () => {
-      sceneEl.removeEventListener('loaded', () => console.log("A-Frame scene listener removed."));
+      console.log("Cleaning up ARScene event listeners.");
+      sceneEl.removeEventListener('loaded', onSceneLoaded);
       sceneEl.removeEventListener('enter-vr', handleARSessionStart);
       sceneEl.removeEventListener('exit-vr', handleARSessionEnd);
+      sceneEl.removeEventListener('xrballoon FAILED', handleARError);
       sceneEl.removeEventListener('xr-session-init-error', handleARError);
-      sceneEl.removeEventListener('click', placeObject);
-      // sceneEl.removeEventListener('select', placeObject);
+      // sceneEl.removeEventListener('click', placeObject); // if you used click
+
+      if (sceneEl.xrSession) {
+        sceneEl.xrSession.removeEventListener('select', placeObject);
+      }
+      // Also remove the temporary listener if it was added
+      // sceneEl.removeEventListener('enter-vr', onEnterVRForSelect); // This is tricky to do correctly if onEnterVRForSelect is not in scope
     };
-  }, [arReady]); // Rerun effect if arReady changes
+  }, []); // Empty dependency array means this effect runs once on mount and cleans up on unmount
 
   return (
     <>
-      {/* DOM Overlay for UI elements like buttons or instructions */}
-      <div id="dom-overlay" style={{ position: 'absolute', top: 0, left: 0, zIndex: 1, padding: '10px', color: 'white', backgroundColor: 'rgba(0,0,0,0.5)'}}>
-        <p>Scan surroundings. Tap screen to place a box.</p>
-        {/* A-Frame's default VR/AR UI button will appear if not customized */}
+      <div id="dom-overlay-message" style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, color: 'white', backgroundColor: 'rgba(0,0,0,0.7)', padding: '10px', borderRadius: '5px' }}>
+        {!arReady ? "Click 'ENTER AR' (bottom-right) then scan your surroundings." : "AR Active! Scan for surfaces. Tap to place a box."}
       </div>
 
       <a-scene
@@ -118,40 +157,34 @@ const ARScene = () => {
         webxr="
           requiredFeatures: hit-test,local-floor;
           optionalFeatures: dom-overlay;
-          overlayElement: #dom-overlay;
+          overlayElement: #dom-overlay-message;
         "
-        ar-hit-test="target: #reticle; type:footprint; footprintDepth:0.2" // target the reticle, type can be 'plane' or 'footprint'
-        // ar-hit-test="target: #reticle; type:plane" // For wider planes
-        // For finer control, you might need custom hit-test logic
-        // or listen to ar-hit-test-select event if available.
-        // cursor="rayOrigin: mouse; fuse: false" // For desktop debugging
-        // renderer="colorManagement: true;" // Good for PBR materials
+        ar-hit-test="target: #reticle; type:footprint; footprintDepth:0.2"
+        renderer="colorManagement: true; physicallyCorrectLights: true;"
+        background="color: #222" // Fallback background
       >
         <a-assets>
-          {/* Preload any assets here if needed */}
+          {/* <a-asset-item id="my-model" src="path/to/your/model.glb"></a-asset-item> */}
         </a-assets>
 
-        {/* Camera Rig */}
         <a-camera position="0 1.6 0" look-controls="enabled: false" wasd-controls="enabled: false">
-          {/* You could add a cursor for desktop interaction, but it's not typical for phone AR tap */}
+          {/* No cursor needed for phone tap AR, interaction via screen tap (select event) */}
         </a-camera>
 
-        {/* Reticle: A visual indicator for where an object will be placed */}
         <a-entity
           id="reticle"
           ref={reticleRef}
-          geometry="primitive: ring; radiusInner: 0.05; radiusOuter: 0.08;"
-          material="color: white; shader: flat; opacity: 0.7;"
-          position="0 -1000 0" // Initially hidden far away
+          geometry="primitive: ring; radiusInner: 0.04; radiusOuter: 0.06;"
+          material="color: white; shader: flat; opacity: 0.8;"
+          position="0 -1000 0" // Initially hidden
           rotation="-90 0 0"
-          visible="false" // Managed by ar-hit-test or AR session start
+          visible="false" // Start invisible, ar-hit-test will make it visible
+          ar-hit-test-target // Mark this as a target for ar-hit-test to manage
         ></a-entity>
 
-        {/* Light */}
-        <a-light type="ambient" color="#888"></a-light>
-        <a-light type="directional" color="#FFF" intensity="0.6" position="-0.5 1 1"></a-light>
+        <a-light type="ambient" color="#BBB" intensity="0.5"></a-light>
+        <a-light type="directional" color="#FFF" intensity="0.8" position="-1 2 1"></a-light>
 
-        {/* Placed Objects */}
         {objects.map(obj => (
           <a-box
             key={obj.id}
@@ -160,20 +193,10 @@ const ARScene = () => {
             depth="0.2"
             width="0.2"
             height="0.2"
-            material={`color: ${obj.color};`}
-            shadow // Enable shadows if you add a ground plane and directional light with shadow casting
+            material={`color: ${obj.color}; roughness: 0.6; metalness: 0.2;`}
+            shadow="cast: true; receive: false"
           ></a-box>
         ))}
-
-        {/* Optional: A simple floor for non-AR mode or when AR tracking is lost temporarily */}
-        {/* <a-plane
-          position="0 0 -2"
-          rotation="-90 0 0"
-          width="10"
-          height="10"
-          material="shader:grid; colorGrid: #555; colorCenterLine: #777"
-          visible={!arReady} // Show only when not in AR
-        ></a-plane> */}
       </a-scene>
     </>
   );
